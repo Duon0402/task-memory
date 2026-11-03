@@ -42,11 +42,22 @@ Code's own memory locations:
 | Project lessons, task notes | `~/.claude/projects/<project>/memory/` |
 | Lessons for all projects | a marked section in `~/.claude/CLAUDE.md` |
 
-Nothing is written into your repositories. If you want to sync lessons across
-machines, put those directories under version control yourself.
+Nothing is written into your repositories. Each machine and each project
+builds up its own lessons; installing the plugin starts you with none.
 
 The file formats are in
 [`plugins/task-memory/skills/capture-lessons/references/format.md`](plugins/task-memory/skills/capture-lessons/references/format.md).
+
+## Tests
+
+`plugins/task-memory/skills/capture-lessons/evals/` and `effect-evals/` contain
+test fixtures only: a fictional project ("shopapp", tasks `SHOP-xx`) with
+made-up lessons. They are never installed into anyone's memory.
+
+- `evals/`: checks that the skill records lessons correctly. Run with
+  `claude plugin eval plugins/task-memory/skills/capture-lessons --allow-tools Write,Edit,Bash --scaffold`.
+- `effect-evals/`: checks that recorded lessons change behaviour on a later
+  task (with vs without memory); see `effect-evals/cases.md`.
 
 ## License
 
