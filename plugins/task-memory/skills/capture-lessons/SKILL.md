@@ -100,7 +100,9 @@ Then:
 - **A mistake already recorded before this task started** → the rule did not
   prevent the mistake. Bump `Seen`, add the task id, bump `slipped`, and *strengthen*
   it: rewrite **How to apply** as a concrete trigger ("before running any
-  formatter…") and spell the rule out in its index hook. If it is a global-type
+  formatter…"), and if the action is concrete enough give it a `**Trigger:**`
+  line (format.md §2) — a slip is the clearest sign that being written down was
+  not enough; otherwise spell the rule out in its index hook. If it is a global-type
   rule living in a project file, move it to the global section, which is always
   loaded in full.
 - **Found in the archive** → move it back to its topic file; it is a slip.
@@ -110,6 +112,12 @@ Then:
   topic file only when none fits.
 
 Keep rules ordered by `Seen` and update each file's `seen` / `last_seen`.
+
+For every new or changed rule, ask whether it is tied to a concrete file path,
+command or code pattern. If so, add a `**Trigger:**` line (format.md §2) so the
+hook can raise it while Claude is coding — that is what turns a recorded lesson
+into one that is actually applied. Default to `remind`; use `block` only when
+the user has said "never". List triggers you added in the report.
 
 ### 6. Housekeeping (every run)
 
@@ -159,6 +167,7 @@ A compact summary, one line per change:
 ↑ lesson_media-upload: "Resize/compress images before upload" 2× → 3×, slipped — hook strengthened
 ⇄ lesson_code-style: "prettier on whole files" → generalised to "any formatter/auto-fixer on whole files" (+eslint --fix), 1× → 2×
 ± lesson_media-upload: "Resize before upload" — Except: signature images
+⚑ lesson_code-style: trigger bash `/\bprettier\b/` · block
 → global: "No Co-Authored-By trailer" moved from project memory
 - inbox: feedback_prettier.md (merged)
 - task_ABC-12 (merged, deleted; repo location kept as reference)

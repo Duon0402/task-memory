@@ -81,6 +81,35 @@ was already recorded*. That means the rule exists but is not working — its
 wording or its placement failed. A slipped rule must be strengthened, not just
 counted (see the capture skill). Omit `slipped` while it is zero.
 
+**Trigger.** A rule tied to a concrete action can carry one or more trigger
+lines. The plugin's PreToolUse hook reads them and puts the rule in front of
+Claude at the moment it is about to take that action, so the rule no longer
+depends on Claude remembering to open this file:
+
+```markdown
+**Trigger:** edit `src/BaseComponent/**` · remind
+**Trigger:** bash `/\bprettier\b|eslint\s.*--fix/` · block
+**Trigger:** content `/uploadFile|InsertPicture/` · remind
+```
+
+| Kind | Matches | Pattern |
+|---|---|---|
+| `edit` | the path of a file being edited or written, relative to the project root | glob (`*`, `**`, `?`) |
+| `bash` | a shell command about to run | `/regex/flags`, or a plain substring |
+| `content` | the code being written by Edit/Write | `/regex/flags`, or a plain substring |
+
+| Level | Effect | Use for |
+|---|---|---|
+| `remind` | adds the rule to Claude's context, once per session; nothing is blocked | rules with legitimate exceptions |
+| `ask` | pauses and asks the user, showing the rule | rules where the user decides case by case |
+| `block` | refuses the action and tells Claude why | rules with no exceptions |
+
+Add a trigger only when the action is unambiguous; a pattern that fires on
+unrelated work teaches Claude to ignore it. Prefer `remind`, and use `block`
+only for rules the user has stated as absolute. Rules that need judgment
+("load all APIs in one Promise.all") get no trigger; they stay in the index
+hook.
+
 ## 3. The inbox (loose auto-memory files)
 
 Claude Code's built-in auto-memory saves a correction the moment it happens, as
@@ -171,7 +200,10 @@ The index is always loaded but the files behind it are opened only when a
 session judges them relevant, so the hook must let a session decide from the
 line alone. Name the concrete rules ("resize images before upload; never touch
 shared base components"), never a category ("misc lessons"). A rule that has
-slipped should be spelled out in the hook itself.
+slipped should be spelled out in the hook itself — unless it has a trigger,
+which already surfaces it at the right moment. Keep each hook under ~150
+characters; when one grows past that, rules are being crammed into the index
+instead of getting triggers.
 
 ## 7. Global lessons in ~/.claude/CLAUDE.md
 
@@ -183,7 +215,7 @@ anything else in that file:
 ```markdown
 <!-- task-memory:global-lessons:start -->
 ## Lessons learned (all projects)
-- <Rule> — seen <N>× · last <YYYY-MM-DD>
+- <Rule> — seen <N>× · last <YYYY-MM-DD>[ · **Trigger:** <kind> `<pattern>` · <level>]
 <!-- task-memory:global-lessons:end -->
 ```
 

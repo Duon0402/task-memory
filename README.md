@@ -32,6 +32,28 @@ Each run:
    lines or fewer (archiving instead of deleting), and moves
    project-independent rules to `~/.claude/CLAUDE.md`.
 
+## Lessons applied while coding
+
+A lesson only helps if it is in front of Claude at the moment it matters. The
+plugin ships a `PreToolUse` hook that runs before every Edit, Write and Bash
+call. Any rule in your lesson files that carries a trigger line is checked
+against what Claude is about to do:
+
+```markdown
+**Trigger:** edit `src/BaseComponent/**` · ask
+**Trigger:** bash `/\bprettier\b/` · block
+**Trigger:** content `/uploadFile|InsertPicture/` · remind
+```
+
+- `remind` adds the rule to Claude's context, once per session.
+- `ask` pauses and asks you.
+- `block` refuses the action and tells Claude why.
+
+`capture-lessons` adds triggers to rules that point at a concrete path, command
+or code pattern. Rules that need judgment have no trigger and stay in the
+`MEMORY.md` index. The hook needs `node` on your `PATH`. It only reads your
+lesson files, and when nothing matches it does nothing.
+
 ## Where the data lives
 
 This repo ships only the mechanism. Lessons stay on your machine, in Claude
@@ -56,6 +78,8 @@ made-up lessons. They are never installed into anyone's memory.
 
 - `evals/`: checks that the skill records lessons correctly. Run with
   `claude plugin eval plugins/task-memory/skills/capture-lessons --allow-tools Write,Edit,Bash --scaffold`.
+- `plugins/task-memory/hooks/test/`: unit tests for the trigger hook. Run with
+  `node --test plugins/task-memory/hooks/test/*.test.mjs`.
 - `effect-evals/`: checks that recorded lessons change behaviour on a later
   task (with vs without memory); see `effect-evals/cases.md`.
 
