@@ -1,0 +1,6 @@
+- [Trả lời tiếng Việt](feedback_reply_vietnamese.md) — mọi project
+- [Không thêm Co-Authored-By](feedback_no_coauthor.md) — commit message không có trailer Co-Authored-By
+- [Chỉ commit khi được yêu cầu](feedback_commit_only_when_asked.md) — không tự git commit
+- [Model theo cmd BE](feedback_model_from_be_cmd.md) — đặt field model mobile theo đúng cmd BE
+- [SHOP-12 báo cáo kho](project_shop12_bao_cao_kho.md) — MR !20 đang review
+- [SHOP-15 lộ trình](project_shop15_lo_trinh.md) — commit local chưa push

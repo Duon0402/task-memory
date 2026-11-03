@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: generalizes-similar-lesson
+expected_outcome: |
+  Three corrections, each similar to but not identical with existing rules.
+  eslint --fix reformatting a whole file shares the prettier rule's root cause:
+  the existing rule is generalised to cover formatters/auto-fixers, keeps both
+  tools as examples, goes to Seen 2× (SHOP-48, SHOP-80) and is NOT marked
+  slipped. Signature images are an exception to "resize before upload": an
+  Except line is added and that rule's count stays 1×. The 5-attachment limit
+  is a different cause in the same area: a new rule in lesson_media-upload.md.
+  No near-duplicate rules are created. The task file shows corrections 3.
+context:
+  scaffold_script: place-files.sh

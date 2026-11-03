@@ -1,0 +1,11 @@
+schema_version: "1.1"
+name: captures-confirmed-approach
+expected_outcome: |
+  Nothing was "wrong" in a review sense, but two reusable approaches were
+  confirmed: model mobile types on the backend command's fields rather than
+  the desktop client; and backend-imported rows may lack the name field, so
+  fall back to showing the code. Both are saved as rules in topic files with
+  Seen 1× — SHOP-70, not marked slipped. The screen-title rename is skipped.
+  The task file is updated (pushed, commit 9f8e7d6, last_capture 2026-11-03).
+context:
+  scaffold_script: place-files.sh

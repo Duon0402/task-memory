@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: routes-global-and-retires-merged
+expected_outcome: |
+  First run over legacy loose files. The three project-independent rules
+  (reply in Vietnamese, no Co-Authored-By, commit only when asked) move into
+  a marked task-memory section of ./home/.claude/CLAUDE.md and their loose
+  files are deleted. The BE-model rule becomes part of a lesson_<topic>.md.
+  SHOP-12 is detected as merged via git: its task notes are deleted but the
+  reusable fact (BE source in shop-api, pull the feature branch first) is kept
+  as a lesson or reference. SHOP-15 (unmerged) survives as task_SHOP-15.md.
+  Memory content stays in Vietnamese. MEMORY.md is rebuilt.
+context:
+  scaffold_script: place-files.sh

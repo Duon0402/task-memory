@@ -1,0 +1,1 @@
+- [Task SHOP-70](task_SHOP-70.md) — bonus items list, in progress

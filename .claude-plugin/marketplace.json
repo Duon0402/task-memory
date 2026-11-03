@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "task-memory-marketplace",
+  "description": "Turn the mistakes made during a task into reusable, size-bounded lessons in Claude Code memory.",
+  "owner": { "name": "Duon0402", "url": "https://github.com/Duon0402" },
+  "plugins": [
+    {
+      "name": "task-memory",
+      "source": "./plugins/task-memory",
+      "description": "End-of-task retrospective that merges corrections into topic-grouped lessons with seen-counters, and keeps the always-loaded memory index within budget.",
+      "category": "productivity"
+    }
+  ]
+}

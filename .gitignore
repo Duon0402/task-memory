@@ -1,0 +1,3 @@
+plugins/*/evals/results/
+*-workspace/
+.DS_Store

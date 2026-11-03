@@ -1,0 +1,2 @@
+- [Code style (×1)](lesson_code-style.md) — never run prettier on whole files
+- [Task SHOP-66](task_SHOP-66.md) — approval screen, in progress

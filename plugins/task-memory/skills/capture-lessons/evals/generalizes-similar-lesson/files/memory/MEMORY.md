@@ -1,0 +1,3 @@
+- [Code style (×1)](lesson_code-style.md) — never run prettier on whole files
+- [Media upload (×1)](lesson_media-upload.md) — resize/compress images before upload (max 1280px, JPEG 0.7)
+- [Task SHOP-80](task_SHOP-80.md) — signature capture on delivery, in progress

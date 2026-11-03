@@ -1,0 +1,5 @@
+- [Code style (×3)](lesson_code-style.md) — never run prettier/eslint --fix over whole files; touch only the lines you change
+- [Media upload (×2)](lesson_media-upload.md) — always resizeImage() (src/utils/image.ts) before uploadFile; signatures excepted
+- [BE integration (×2)](lesson_be-integration.md) — model types on the BE cmd in ../shop-api, not shop-desktop; batch-imported rows may lack name → show code
+- [UI components (×1)](lesson_ui-components.md) — never modify shared base components (src/components/Base*) without asking
+- [Repo BE shop-api](reference_be_repo_shop_api.md) — BE source at ../shop-api
