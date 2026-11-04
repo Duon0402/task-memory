@@ -226,3 +226,11 @@ test('arrows are not redirects', () => {
   assert.equal(bashWrites('grep "a -> b" src/a.tsx'), false)
   assert.equal(bashWrites('echo x > src/a.tsx'), true)
 })
+
+test('memory dir fallback encodes every non-alphanumeric character like Claude Code does', async () => {
+  const { memoryDir } = await import('../lesson-triggers.mjs')
+  const prev = process.env.TASK_MEMORY_DIR
+  delete process.env.TASK_MEMORY_DIR
+  assert.match(memoryDir({ cwd: '/var/folders/k_g/T/tm.eval' }), /projects\/-var-folders-k-g-T-tm-eval\/memory$/)
+  if (prev !== undefined) process.env.TASK_MEMORY_DIR = prev
+})

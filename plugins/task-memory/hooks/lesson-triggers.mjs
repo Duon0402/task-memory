@@ -27,7 +27,7 @@ export function memoryDir(input) {
   if (process.env.TASK_MEMORY_DIR) return process.env.TASK_MEMORY_DIR
   if (input.transcript_path) return path.join(path.dirname(input.transcript_path), 'memory')
   const cwd = input.cwd || process.cwd()
-  return path.join(os.homedir(), '.claude', 'projects', cwd.replace(/[/.]/g, '-'), 'memory')
+  return path.join(os.homedir(), '.claude', 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), 'memory')
 }
 
 function globalFile() {
