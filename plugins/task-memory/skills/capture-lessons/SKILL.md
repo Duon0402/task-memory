@@ -116,7 +116,9 @@ Then:
   line (format.md §2) — a slip is the clearest sign that being written down was
   not enough. When the wrong code itself has a recognisable shape, add a second,
   *mistake-shaped* trigger at `ask` that matches only the wrong form (e.g.
-  `content \`/<HModal\b[^>]*onClose=\{(?!HMODAL_ON_CLOSE_RONG\})/\` · ask`):
+  `file \`/<HModal\b[^>]*onClose=\{(?!HMODAL_ON_CLOSE_RONG\})/\` · ask` — `file`
+  sees existing code too, so the mistake is caught even when the edit is about
+  something else):
   correct code passes silently, wrong code stops for the user. A slip with no
   code pattern gets a `**Checkpoint:**` line instead (below); spell it out in its
   index hook as well. If it is a global-type

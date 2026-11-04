@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const TRIGGER = /\*\*Trigger:\*\*\s*(edit|bash|content)\s+`([^`]+)`\s*·\s*(remind|ask|block)/g
+const TRIGGER = /\*\*Trigger:\*\*\s*(edit|bash|content|file)\s+`([^`]+)`\s*·\s*(remind|ask|block)/g
 const GLOBAL_START = '<!-- task-memory:global-lessons:start -->'
 const GLOBAL_END = '<!-- task-memory:global-lessons:end -->'
 const RANK = { remind: 0, ask: 1, block: 2 }
@@ -113,7 +113,7 @@ function toRegExp(pattern) {
 // edit triggers too; a read-only one (grep, cat, sed -n) is not, so searching for
 // a pattern does not raise the lesson about writing it.
 const WRITES = [
-  /(^|[^0-9&>])>>?\s*(?!&|\/dev\/null)[^\s|&;]/,
+  /(^|[^0-9&>=-])>>?\s*(?!&|\/dev\/null)[^\s|&;]/,
   /\bsed\s+(-[a-zA-Z]*i|--in-place)/,
   /\bperl\s+-[a-zA-Z]*i/,
   /\btee\b/,
@@ -176,6 +176,21 @@ function copies(command, cwd) {
   return { files, content: content.join('\n') }
 }
 
+// The file as it will be after an Edit/MultiEdit/Write: `file` triggers look at
+// all of it, so a mistake already sitting in old code is caught when the file is
+// touched for something else.
+function fileAfter(input) {
+  const t = input.tool_input || {}
+  if (input.tool_name === 'Write') return t.content || ''
+  let text = readSmall(path.resolve(input.cwd || '.', t.file_path || ''))
+  const edits = input.tool_name === 'MultiEdit' ? t.edits || [] : [t]
+  for (const e of edits) {
+    if (!e.old_string) continue
+    text = e.replace_all ? text.split(e.old_string).join(e.new_string ?? '') : text.replace(e.old_string, () => e.new_string ?? '')
+  }
+  return text
+}
+
 function subject(input) {
   const t = input.tool_input || {}
   const cwd = input.cwd || ''
@@ -186,17 +201,20 @@ function subject(input) {
     const paths = writes ? [...command.matchAll(PATH_TOKEN)].map((m) => relative(m[1], cwd)) : []
     // The command text counts as written code only when it writes a code file,
     // so `echo "<HModal>" > notes.txt` does not raise the HModal lesson.
-    const writesCode = paths.some((f) => CODE_FILE.test(f))
+    const codePaths = paths.filter((f) => CODE_FILE.test(f))
+    const content = [codePaths.length ? command : '', copied.content].filter(Boolean).join('\n')
+    const existing = codePaths.map((f) => readSmall(path.resolve(cwd || '.', f.replace(/^~\//, os.homedir() + '/'))))
     return {
       tool: 'Bash',
       files: [...copied.files, ...paths],
       command: withoutHeredocs(command),
-      content: [writesCode ? command : '', copied.content].filter(Boolean).join('\n'),
+      content,
+      fileContent: [content, ...existing].filter(Boolean).join('\n'),
     }
   }
   const file = relative(t.file_path || '', cwd)
   const content = [t.new_string, t.content, ...(t.edits || []).map((e) => e.new_string)].filter(Boolean).join('\n')
-  return { tool: input.tool_name, files: file ? [file] : [], command, content }
+  return { tool: input.tool_name, files: file ? [file] : [], command, content, fileContent: file ? fileAfter(input) : '' }
 }
 
 export function matches(trigger, s) {
@@ -205,9 +223,10 @@ export function matches(trigger, s) {
     return s.tool === 'Bash' && !!re && re.test(s.command)
   }
   if (trigger.kind === 'edit') return s.files.some((f) => globToRegExp(trigger.pattern).test(f))
-  if (!s.content) return false
+  const text = trigger.kind === 'file' ? s.fileContent : s.content
+  if (!text) return false
   const re = toRegExp(trigger.pattern)
-  return !!re && re.test(s.content)
+  return !!re && re.test(text)
 }
 
 // The reminder carries only what is needed to act — title, How to apply and any

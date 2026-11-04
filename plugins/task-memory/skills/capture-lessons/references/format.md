@@ -96,6 +96,7 @@ depends on Claude remembering to open this file:
 |---|---|---|
 | `edit` | the path of a file being edited or written, relative to the project root — by Edit/Write, or by a Bash command that writes files | glob (`*`, `**`, `?`) |
 | `bash` | a shell command about to run | `/regex/flags`, or a plain substring |
+| `file` | the whole file as it will be after the Edit/Write (existing code included), or the code files a Bash command writes | `/regex/flags`, or a plain substring |
 | `content` | the code being written by Edit/Write, or the text of a Bash command that writes files (heredoc, `sed -i`, a script that opens a file for writing) | `/regex/flags`, or a plain substring |
 
 Read-only commands (`grep`, `cat`, `sed -n`) never match `content` or `edit`,
@@ -120,7 +121,9 @@ unrelated work teaches Claude to ignore it. Prefer `remind`, and use `block`
 only for rules the user has stated as absolute. A rule that has slipped and
 whose wrong code has a recognisable shape can also carry a *mistake-shaped*
 trigger at `ask`, matching only the wrong form, so correct code is never
-interrupted.
+interrupted. Use `file`, not `content`, when the mistake can already sit in old
+code: `content` sees only the lines being written, so adding a prop to a file
+whose existing `<HModal onClose={props.onCancel}>` is wrong would pass unseen.
 
 **Checkpoint.** Rules that need judgment ("keep project-wide patterns", "verify
 each review point") have no pattern to match. Give them a checkpoint instead:

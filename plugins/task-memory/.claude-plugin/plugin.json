@@ -1,6 +1,6 @@
 {
   "name": "task-memory",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "End-of-task retrospective that merges corrections into topic-grouped lessons with seen-counters, and keeps the always-loaded memory index within budget, and raises a lesson through a PreToolUse hook at the moment Claude is about to repeat it.",
   "author": { "name": "Duon0402", "url": "https://github.com/Duon0402" },
   "homepage": "https://github.com/Duon0402/task-memory",

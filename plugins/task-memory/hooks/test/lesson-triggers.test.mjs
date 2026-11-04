@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseUnits, decide } from '../lesson-triggers.mjs'
+import { parseUnits, decide, bashWrites } from '../lesson-triggers.mjs'
 
 const topic = `---
 name: lesson-code
@@ -204,4 +204,25 @@ test('bash triggers and checkpoints ignore heredoc bodies', () => {
   assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: body } }, [...units, ...judgment], store()), null)
   const real = "cat > a.md <<'X'\nhello\nX\nnpx prettier --write src"
   assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: real } }, units, store()).hookSpecificOutput.permissionDecision, 'deny')
+})
+
+test('file triggers see the whole file after the edit, including old code the edit does not touch', async () => {
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-'))
+  const rule = parseUnits('## HModal onClose\n**How to apply:** no-op onClose.\n**Trigger:** file `/<HModal\\b[^>]*onClose=\\{(?!NOOP\\})/` · ask\n', 'lesson_ui.md')
+  const f = path.join(dir, 'Km.tsx')
+  fs.writeFileSync(f, '<HModal visible={v} onClose={props.onCancel}>\n  <Input a />\n</HModal>')
+  const addProp = { cwd: dir, tool_name: 'Edit', tool_input: { file_path: f, old_string: '  <Input a />', new_string: '  <Input km />\n  <Input a />' } }
+  assert.equal(decide(addProp, rule, store()).hookSpecificOutput.permissionDecision, 'ask')
+  const fix = { cwd: dir, tool_name: 'Edit', tool_input: { file_path: f, old_string: 'onClose={props.onCancel}', new_string: 'onClose={NOOP}' } }
+  assert.equal(decide(fix, rule, store()), null)
+  assert.equal(decide(addProp, parseUnits('## X\n**Trigger:** content `/<HModal/` · ask\n', 'l.md'), store()), null)
+})
+
+test('arrows are not redirects', () => {
+  assert.equal(bashWrites('grep -n "=> {}" src/a.tsx'), false)
+  assert.equal(bashWrites('grep "a -> b" src/a.tsx'), false)
+  assert.equal(bashWrites('echo x > src/a.tsx'), true)
 })
