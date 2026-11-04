@@ -54,7 +54,10 @@ Code written through Bash counts too: a command that writes files (heredoc,
 and `edit` triggers, while read-only commands (`grep`, `cat`, `sed -n`) are not.
 A reminder carries only the rule's title, How to apply, any Except and the
 file it lives in, so it costs a few lines; the Why stays in the file. It is
-shown once per session, or once per file for a rule that has slipped.
+shown once per session, or once per file for a rule that has slipped, and
+again after the context is compacted. Rules that need judgment carry a
+`**Checkpoint:** commit|mr|review` line instead of a trigger; the hook lists
+them by title before every commit, MR or review reply.
 
 `skills/capture-lessons/scripts/lesson-titles.mjs` lists every rule one line
 each (`seen · file § title`, `--grep` to filter, `--show` to print one in

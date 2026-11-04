@@ -114,7 +114,12 @@ Then:
   it: rewrite **How to apply** as a concrete trigger ("before running any
   formatter…"), and if the action is concrete enough give it a `**Trigger:**`
   line (format.md §2) — a slip is the clearest sign that being written down was
-  not enough; otherwise spell the rule out in its index hook. If it is a global-type
+  not enough. When the wrong code itself has a recognisable shape, add a second,
+  *mistake-shaped* trigger at `ask` that matches only the wrong form (e.g.
+  `content \`/<HModal\b[^>]*onClose=\{(?!HMODAL_ON_CLOSE_RONG\})/\` · ask`):
+  correct code passes silently, wrong code stops for the user. A slip with no
+  code pattern gets a `**Checkpoint:**` line instead (below); spell it out in its
+  index hook as well. If it is a global-type
   rule living in a project file, move it to the global section, which is always
   loaded in full.
 - **Found in the archive** → move it back to its topic file; it is a slip.
@@ -135,6 +140,12 @@ command or code pattern. If so, add a `**Trigger:**` line (format.md §2) so the
 hook can raise it while Claude is coding — that is what turns a recorded lesson
 into one that is actually applied. Default to `remind`; use `block` only when
 the user has said "never". List triggers you added in the report.
+
+A rule that needs judgment and has no code pattern (keep project-wide patterns,
+verify each review point, ask before committing) gets a `**Checkpoint:**` line
+naming the moment it must be checked — `commit`, `mr` and/or `review`. The hook
+lists checkpoint rules by title every time that moment comes, so they no longer
+depend on being remembered from the index.
 
 ### 6. Housekeeping (every run)
 

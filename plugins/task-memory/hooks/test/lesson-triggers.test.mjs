@@ -149,3 +149,59 @@ Seen 1× — A-1
   assert.match(edit('a.tsx', '<BarcodeScan />').hookSpecificOutput.additionalContext, /Normal rule/)
   assert.equal(edit('b.tsx', '<BarcodeScan />'), null)
 })
+
+const judgment = parseUnits(`## Keep project-wide patterns even when review points at them
+Seen 2× — A-1 · slipped 1×
+**How to apply:** grep for precedent first.
+**Checkpoint:** commit, review
+
+## Check MR description
+**How to apply:** open the MR after creating it.
+**Checkpoint:** mr
+`, 'lesson_code.md')
+
+test('checkpoint rules are listed by title at their moment, every time', () => {
+  const st = store()
+  const commit = { cwd, tool_name: 'Bash', tool_input: { command: 'git add a.ts && git commit -m "fix: x"' } }
+  for (let i = 0; i < 2; i++) {
+    const text = decide(commit, judgment, st).hookSpecificOutput.additionalContext
+    assert.match(text, /Checkpoint before commit/)
+    assert.match(text, /• Keep project-wide patterns even when review points at them \(lesson_code\.md\)/)
+    assert.doesNotMatch(text, /grep for precedent|Check MR description/)
+  }
+  const review = decide({ cwd, tool_name: 'Bash', tool_input: { command: 'glab api -X POST "projects/x/merge_requests/1/discussions/abc/notes" -f body=ok' } }, judgment, st)
+  assert.match(review.hookSpecificOutput.additionalContext, /Checkpoint before review[\s\S]*Keep project-wide/)
+  assert.match(decide({ cwd, tool_name: 'Bash', tool_input: { command: 'glab mr create --title x' } }, judgment, st).hookSpecificOutput.additionalContext, /Check MR description/)
+  assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: 'git status' } }, judgment, st), null)
+})
+
+test('a mistake-shaped trigger at ask level stops only the wrong code', () => {
+  const rule = parseUnits('## HModal onClose\n**How to apply:** no-op onClose.\n**Trigger:** content `/<HModal\\b[^>]*onClose=\\{(?!HMODAL_ON_CLOSE_RONG\\})/` · ask\n', 'lesson_ui.md')
+  const write = (content) => decide({ cwd, tool_name: 'Write', tool_input: { file_path: '/proj/a.tsx', content } }, rule, store())
+  assert.equal(write('<HModal visible={v} onClose={props.onCancel}>').hookSpecificOutput.permissionDecision, 'ask')
+  assert.equal(write('<HModal visible={v} onClose={HMODAL_ON_CLOSE_RONG}>'), null)
+})
+
+test('Bash text counts as content only when it writes a code file', () => {
+  assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: 'echo "InsertPicture(" > notes.txt' } }, units, store()), null)
+  assert.match(decide({ cwd, tool_name: 'Bash', tool_input: { command: "cat > A.tsx <<'X'\nInsertPicture(\nX" } }, units, store()).hookSpecificOutput.additionalContext, /Resize images/)
+})
+
+test('cp/mv match the destination against edit triggers and the source content against content triggers', async () => {
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-'))
+  fs.writeFileSync(path.join(dir, 'tpl.tsx'), 'const a = InsertPicture(x)')
+  const cp = decide({ cwd: dir, tool_name: 'Bash', tool_input: { command: `cp tpl.tsx ${dir}/src/BaseComponent/New.tsx` } }, units, store())
+  const text = cp.hookSpecificOutput.additionalContext
+  assert.match(text, /shared base components/)
+  assert.match(text, /Resize images/)
+})
+
+test('bash triggers and checkpoints ignore heredoc bodies', () => {
+  const body = "cat >> notes.md <<'X'\nnpx prettier --write . && git commit -m x\nX\necho done"
+  assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: body } }, [...units, ...judgment], store()), null)
+  const real = "cat > a.md <<'X'\nhello\nX\nnpx prettier --write src"
+  assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: real } }, units, store()).hookSpecificOutput.permissionDecision, 'deny')
+})

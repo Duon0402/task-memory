@@ -12,6 +12,16 @@ const TRIGGER = /\*\*Trigger:\*\*\s*(edit|bash|content)\s+`([^`]+)`\s*·\s*(remi
 const GLOBAL_START = '<!-- task-memory:global-lessons:start -->'
 const GLOBAL_END = '<!-- task-memory:global-lessons:end -->'
 const RANK = { remind: 0, ask: 1, block: 2 }
+const CHECKPOINT = /\*\*Checkpoint:\*\*\s*([a-z][a-z ,|]*)/i
+// Moments where rules that need judgment (no code pattern to match) are listed
+// by title, every time: before a commit, before opening/updating an MR or PR,
+// and before replying to review.
+const CHECKPOINT_EVENTS = {
+  commit: /\bgit\s+commit\b/,
+  mr: /\b(glab\s+mr\s+(create|update)|gh\s+pr\s+(create|edit))\b/,
+  review: /\bglab\s+(api\b[^\n]*\/discussions|mr\s+note)\b|\bgh\s+pr\s+(review|comment)\b/,
+}
+const CODE_FILE = /\.(tsx?|jsx?|mjs|cjs|vue|cs|py|java|kt|swift|dart|go|rb|php|css|scss)$/i
 
 export function memoryDir(input) {
   if (process.env.TASK_MEMORY_DIR) return process.env.TASK_MEMORY_DIR
@@ -40,7 +50,8 @@ export function parseRules(text, source) {
     const triggers = [...body.matchAll(TRIGGER)].map(([, kind, pattern, level]) => ({ kind, pattern, level }))
     const seen = Number((body.match(/seen (\d+)×/i) || [])[1] || 0)
     const slipped = /slipped \d+×/i.test(body)
-    units.push({ id: `${source}#${title}`, source, title, body, seen, slipped, triggers })
+    const checkpoints = ((body.match(CHECKPOINT) || [])[1] || '').split(/[\s,|]+/).filter((c) => c in CHECKPOINT_EVENTS)
+    units.push({ id: `${source}#${title}`, source, title, body, seen, slipped, triggers, checkpoints })
   }
   if (source === 'global') {
     const start = text.indexOf(GLOBAL_START)
@@ -59,7 +70,7 @@ export function parseRules(text, source) {
 }
 
 export function parseUnits(text, source) {
-  return parseRules(text, source).filter((u) => u.triggers.length)
+  return parseRules(text, source).filter((u) => u.triggers.length || u.checkpoints.length)
 }
 
 export function loadUnits(dir) {
@@ -111,6 +122,22 @@ const WRITES = [
   /\bgit\s+apply\b|\bpatch\s+-/,
 ]
 
+// Heredoc bodies are data (file content, a script), not the command being run:
+// bash triggers and checkpoints look at the command without them.
+export function withoutHeredocs(command) {
+  const lines = command.split('\n')
+  const out = []
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i])
+    const tags = [...lines[i].matchAll(/<<-?\s*(['"]?)([\w-]+)\1/g)].map((m) => m[2])
+    for (const tag of tags) {
+      while (i + 1 < lines.length && lines[i + 1].trim() !== tag) i++
+      i++
+    }
+  }
+  return out.join('\n')
+}
+
 export function bashWrites(command) {
   return WRITES.some((re) => re.test(command))
 }
@@ -119,14 +146,53 @@ function relative(file, cwd) {
   return file && cwd && file.startsWith(cwd + '/') ? file.slice(cwd.length + 1) : file
 }
 
+const PATH_TOKEN = /(?:^|[\s'"`(=>])((?:\.{0,2}\/|~\/)?[\w.@-]+(?:\/[\w.@-]+)+|[\w.@-]+\.[a-z]{1,5})(?=$|[\s'"`);|&<])/gi
+
+function readSmall(file) {
+  try {
+    return fs.statSync(file).size < 512 * 1024 ? fs.readFileSync(file, 'utf8') : ''
+  } catch {
+    return ''
+  }
+}
+
+// cp/mv/rsync/install put an existing file's content at a new path: the
+// destination is matched against edit triggers, the source content against
+// content triggers.
+function copies(command, cwd) {
+  const files = []
+  const content = []
+  for (const part of command.split(/&&|\|\||;|\n/)) {
+    const m = part.trim().match(/^(?:sudo\s+)?(cp|mv|rsync|install)\s+(.*)$/)
+    if (!m) continue
+    const args = m[2].split(/\s+/).filter((a) => a && !a.startsWith('-')).map((a) => a.replace(/^['"]|['"]$/g, ''))
+    if (args.length < 2) continue
+    const dest = args.pop()
+    for (const src of args) {
+      files.push(relative(dest.endsWith('/') ? dest + path.basename(src) : dest, cwd))
+      content.push(readSmall(path.resolve(cwd || '.', src)))
+    }
+  }
+  return { files, content: content.join('\n') }
+}
+
 function subject(input) {
   const t = input.tool_input || {}
   const cwd = input.cwd || ''
   const command = t.command || ''
   if (input.tool_name === 'Bash') {
+    const copied = copies(command, cwd)
     const writes = bashWrites(command)
-    const paths = writes ? [...command.matchAll(/(?:^|[\s'"`(=])((?:\.{0,2}\/|~\/)?[\w.@-]+(?:\/[\w.@-]+)+)/g)].map((m) => relative(m[1], cwd)) : []
-    return { tool: 'Bash', files: paths, command, content: writes ? command : '' }
+    const paths = writes ? [...command.matchAll(PATH_TOKEN)].map((m) => relative(m[1], cwd)) : []
+    // The command text counts as written code only when it writes a code file,
+    // so `echo "<HModal>" > notes.txt` does not raise the HModal lesson.
+    const writesCode = paths.some((f) => CODE_FILE.test(f))
+    return {
+      tool: 'Bash',
+      files: [...copied.files, ...paths],
+      command: withoutHeredocs(command),
+      content: [writesCode ? command : '', copied.content].filter(Boolean).join('\n'),
+    }
   }
   const file = relative(t.file_path || '', cwd)
   const content = [t.new_string, t.content, ...(t.edits || []).map((e) => e.new_string)].filter(Boolean).join('\n')
@@ -163,8 +229,12 @@ export function summary(unit) {
 // already in context, and repeating it on every edit would only cost tokens.
 // A rule that has slipped (the mistake recurred although it was recorded) is
 // shown once per file instead: being in context once was not enough for it.
+function storeFile(sessionId) {
+  return path.join(os.tmpdir(), `task-memory-${(sessionId || 'nosession').replace(/[^\w-]/g, '')}.json`)
+}
+
 function seenStore(sessionId) {
-  const file = path.join(os.tmpdir(), `task-memory-${(sessionId || 'nosession').replace(/[^\w-]/g, '')}.json`)
+  const file = storeFile(sessionId)
   let seen = []
   try {
     seen = JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -180,6 +250,10 @@ function seenStore(sessionId) {
   }
 }
 
+export function checkpointEvents(s) {
+  return s.tool === 'Bash' ? Object.keys(CHECKPOINT_EVENTS).filter((e) => CHECKPOINT_EVENTS[e].test(s.command)) : []
+}
+
 export function decide(input, units, store) {
   const s = subject(input)
   const hits = []
@@ -189,9 +263,20 @@ export function decide(input, units, store) {
   }
   const key = (u) => (u.slipped && s.files.length ? `${u.id}@${s.files[0]}` : u.id)
   const shown = hits.filter((h) => h.level !== 'remind' || !store?.has(key(h.unit)))
-  if (!shown.length) return null
+  // Checkpoint rules are listed by title every time their moment comes: a list
+  // of titles is cheap, and these rules have no pattern that could raise them earlier.
+  const events = checkpointEvents(s)
+  const listed = units.filter((u) => u.checkpoints.some((c) => events.includes(c)) && !shown.some((h) => h.unit === u))
+  if (!shown.length && !listed.length) return null
   const level = shown.reduce((a, h) => (RANK[h.level] > RANK[a] ? h.level : a), 'remind')
-  const text = shown.map((h) => summary(h.unit)).join('\n\n')
+  const parts = shown.map((h) => summary(h.unit))
+  if (listed.length) {
+    parts.push(
+      `Checkpoint before ${events.join('/')} — confirm each of these was respected (open the file only if unsure):\n` +
+        listed.map((u) => `• ${u.title} (${u.source === 'global' ? 'global' : u.source})`).join('\n')
+    )
+  }
+  const text = parts.join('\n\n')
   for (const h of shown) if (h.level === 'remind') store?.add(key(h.unit))
   const header = 'Recorded lesson (task-memory) for what you are about to do (open the rule at ↳ only if you need its Why):'
   if (level === 'remind') {
@@ -213,6 +298,14 @@ async function main() {
   try {
     input = JSON.parse(raw)
   } catch {
+    return
+  }
+  // SessionStart after compaction: reminders given before were summarised away,
+  // so forget them and let each rule be raised again.
+  if (process.argv.includes('--session-start')) {
+    try {
+      fs.unlinkSync(storeFile(input.session_id))
+    } catch {}
     return
   }
   const out = decide(input, loadUnits(memoryDir(input)), seenStore(input.session_id))

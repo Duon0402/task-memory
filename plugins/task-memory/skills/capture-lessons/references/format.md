@@ -111,15 +111,42 @@ apply self-sufficient.
 
 | Level | Effect | Use for |
 |---|---|---|
-| `remind` | adds the rule to Claude's context, once per session; nothing is blocked | rules with legitimate exceptions |
+| `remind` | adds the rule to Claude's context, once per session (once per file for a slipped rule); nothing is blocked | rules with legitimate exceptions |
 | `ask` | pauses and asks the user, showing the rule | rules where the user decides case by case |
 | `block` | refuses the action and tells Claude why | rules with no exceptions |
 
 Add a trigger only when the action is unambiguous; a pattern that fires on
 unrelated work teaches Claude to ignore it. Prefer `remind`, and use `block`
-only for rules the user has stated as absolute. Rules that need judgment
-("load all APIs in one Promise.all") get no trigger; they stay in the index
-hook.
+only for rules the user has stated as absolute. A rule that has slipped and
+whose wrong code has a recognisable shape can also carry a *mistake-shaped*
+trigger at `ask`, matching only the wrong form, so correct code is never
+interrupted.
+
+**Checkpoint.** Rules that need judgment ("keep project-wide patterns", "verify
+each review point") have no pattern to match. Give them a checkpoint instead:
+
+```markdown
+**Checkpoint:** commit, review
+```
+
+| Moment | Raised before |
+|---|---|
+| `commit` | `git commit` |
+| `mr` | `glab mr create/update`, `gh pr create/edit` |
+| `review` | replying to review: `glab api …/discussions`, `glab mr note`, `gh pr review/comment` |
+
+At that moment the hook lists every matching checkpoint rule by title, every
+time (titles only, so it stays cheap). Heredoc bodies in a command are ignored
+when matching `bash` triggers and checkpoints — they are data, not the command.
+
+Reminders already given are forgotten when the context is compacted
+(`SessionStart` with source `compact`), so each rule can be raised again after
+the summary dropped it.
+
+`cp`/`mv`/`rsync`/`install` match their destination against `edit` triggers and
+the source file's content against `content` triggers. The text of a command
+counts as written code only when the command writes a code file, so
+`echo "<HModal>" > notes.txt` raises nothing.
 
 ## 3. The inbox (loose auto-memory files)
 
