@@ -8,7 +8,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const TRIGGER = /\*\*Trigger:\*\*\s*(edit|bash|content|file)\s+`([^`]+)`\s*·\s*(remind|ask|block)/g
+const TRIGGER = /\*\*Trigger:\*\*\s*(edit|bash|content|file)\s+`([^`]+)`\s*·\s*(remind|ask|block)(?:\s*·\s*near\s+(\d+))?/g
+// A `file` trigger fires only when the edit lands within this many lines of the
+// matched code, so touching an unrelated part of a file with old bad code stays quiet.
+const NEAR_DEFAULT = 40
 const GLOBAL_START = '<!-- task-memory:global-lessons:start -->'
 const GLOBAL_END = '<!-- task-memory:global-lessons:end -->'
 const RANK = { remind: 0, ask: 1, block: 2 }
@@ -47,7 +50,7 @@ function read(file) {
 export function parseRules(text, source) {
   const units = []
   const push = (title, body) => {
-    const triggers = [...body.matchAll(TRIGGER)].map(([, kind, pattern, level]) => ({ kind, pattern, level }))
+    const triggers = [...body.matchAll(TRIGGER)].map(([, kind, pattern, level, near]) => ({ kind, pattern, level, near: near ? Number(near) : NEAR_DEFAULT }))
     const seen = Number((body.match(/seen (\d+)×/i) || [])[1] || 0)
     const slipped = /slipped \d+×/i.test(body)
     const checkpoints = ((body.match(CHECKPOINT) || [])[1] || '').split(/[\s,|]+/).filter((c) => c in CHECKPOINT_EVENTS)
@@ -179,16 +182,28 @@ function copies(command, cwd) {
 // The file as it will be after an Edit/MultiEdit/Write: `file` triggers look at
 // all of it, so a mistake already sitting in old code is caught when the file is
 // touched for something else.
+const lineAt = (text, index) => text.slice(0, index).split('\n').length
+
+// Returns the file as it will be plus the line ranges the edit writes; ranges
+// are null when the whole file is new (Write) or unknown.
 function fileAfter(input) {
   const t = input.tool_input || {}
-  if (input.tool_name === 'Write') return t.content || ''
+  if (input.tool_name === 'Write') return { text: t.content || '', ranges: null }
   let text = readSmall(path.resolve(input.cwd || '.', t.file_path || ''))
   const edits = input.tool_name === 'MultiEdit' ? t.edits || [] : [t]
   for (const e of edits) {
     if (!e.old_string) continue
     text = e.replace_all ? text.split(e.old_string).join(e.new_string ?? '') : text.replace(e.old_string, () => e.new_string ?? '')
   }
-  return text
+  const ranges = []
+  for (const e of edits) {
+    const n = e.new_string ?? ''
+    if (!n) continue
+    for (let i = text.indexOf(n); i >= 0; i = e.replace_all ? text.indexOf(n, i + 1) : -1) {
+      ranges.push([lineAt(text, i), lineAt(text, i + n.length)])
+    }
+  }
+  return { text, ranges: ranges.length ? ranges : null }
 }
 
 function subject(input) {
@@ -210,11 +225,13 @@ function subject(input) {
       command: withoutHeredocs(command),
       content,
       fileContent: [content, ...existing].filter(Boolean).join('\n'),
+      ranges: null,
     }
   }
   const file = relative(t.file_path || '', cwd)
   const content = [t.new_string, t.content, ...(t.edits || []).map((e) => e.new_string)].filter(Boolean).join('\n')
-  return { tool: input.tool_name, files: file ? [file] : [], command, content, fileContent: file ? fileAfter(input) : '' }
+  const after = file ? fileAfter(input) : { text: '', ranges: null }
+  return { tool: input.tool_name, files: file ? [file] : [], command, content, fileContent: after.text, ranges: after.ranges }
 }
 
 export function matches(trigger, s) {
@@ -226,7 +243,20 @@ export function matches(trigger, s) {
   const text = trigger.kind === 'file' ? s.fileContent : s.content
   if (!text) return false
   const re = toRegExp(trigger.pattern)
-  return !!re && re.test(text)
+  if (!re) return false
+  if (trigger.kind !== 'file' || !s.ranges) return re.test(text)
+  return fileMatchLine(re, text, s.ranges, trigger.near) !== null
+}
+
+// First line of a match that lies within `near` lines of an edited range.
+export function fileMatchLine(re, text, ranges, near = NEAR_DEFAULT) {
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
+  for (const m of text.matchAll(g)) {
+    const line = lineAt(text, m.index)
+    if (ranges.some(([a, b]) => line >= a - near && line <= b + near)) return line
+    if (!m[0].length) break
+  }
+  return null
 }
 
 // The reminder carries only what is needed to act — title, How to apply and any
@@ -269,6 +299,9 @@ function seenStore(sessionId) {
   }
 }
 
+// Global rules are one long line each; a checkpoint list only needs enough to recognise them.
+const short = (title) => (title.length > 90 ? title.slice(0, 87).trimEnd() + '…' : title)
+
 export function checkpointEvents(s) {
   return s.tool === 'Bash' ? Object.keys(CHECKPOINT_EVENTS).filter((e) => CHECKPOINT_EVENTS[e].test(s.command)) : []
 }
@@ -280,8 +313,12 @@ export function decide(input, units, store) {
     const hit = u.triggers.filter((t) => matches(t, s)).sort((a, b) => RANK[b.level] - RANK[a.level])[0]
     if (hit) hits.push({ unit: u, level: hit.level })
   }
-  const key = (u) => (u.slipped && s.files.length ? `${u.id}@${s.files[0]}` : u.id)
-  const shown = hits.filter((h) => h.level !== 'remind' || !store?.has(key(h.unit)))
+  // remind: once per session (once per file for a slipped rule). ask: once per
+  // file per session, so an answered question is not asked again on the next edit.
+  // block: every time.
+  const key = (h) =>
+    h.level === 'ask' ? `ask:${h.unit.id}@${s.files[0] || ''}` : h.unit.slipped && s.files.length ? `${h.unit.id}@${s.files[0]}` : h.unit.id
+  const shown = hits.filter((h) => h.level === 'block' || !store?.has(key(h)))
   // Checkpoint rules are listed by title every time their moment comes: a list
   // of titles is cheap, and these rules have no pattern that could raise them earlier.
   const events = checkpointEvents(s)
@@ -292,11 +329,11 @@ export function decide(input, units, store) {
   if (listed.length) {
     parts.push(
       `Checkpoint before ${events.join('/')} — confirm each of these was respected (open the file only if unsure):\n` +
-        listed.map((u) => `• ${u.title} (${u.source === 'global' ? 'global' : u.source})`).join('\n')
+        listed.map((u) => `• ${short(u.title)} (${u.source === 'global' ? 'global' : u.source})`).join('\n')
     )
   }
   const text = parts.join('\n\n')
-  for (const h of shown) if (h.level === 'remind') store?.add(key(h.unit))
+  for (const h of shown) if (h.level !== 'block') store?.add(key(h))
   const header = 'Recorded lesson (task-memory) for what you are about to do (open the rule at ↳ only if you need its Why):'
   if (level === 'remind') {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: `${header}\n\n${text}` } }

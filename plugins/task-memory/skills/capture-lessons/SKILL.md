@@ -141,7 +141,10 @@ For every new or changed rule, ask whether it is tied to a concrete file path,
 command or code pattern. If so, add a `**Trigger:**` line (format.md §2) so the
 hook can raise it while Claude is coding — that is what turns a recorded lesson
 into one that is actually applied. Default to `remind`; use `block` only when
-the user has said "never". List triggers you added in the report.
+the user has said "never". Then run `scripts/lesson-titles.mjs --check` in the
+project and narrow any trigger it flags `WIDE` or `BROKEN` (format.md §2) — a
+mistake-shaped `ask` that matches dozens of files interrupts every edit of
+them. List triggers you added in the report, with their `--check` file count.
 
 A rule that needs judgment and has no code pattern (keep project-wide patterns,
 verify each review point, ask before committing) gets a `**Checkpoint:**` line

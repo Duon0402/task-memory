@@ -234,3 +234,35 @@ test('memory dir fallback encodes every non-alphanumeric character like Claude C
   assert.match(memoryDir({ cwd: '/var/folders/k_g/T/tm.eval' }), /projects\/-var-folders-k-g-T-tm-eval\/memory$/)
   if (prev !== undefined) process.env.TASK_MEMORY_DIR = prev
 })
+
+test('file trigger stays quiet when the edit is far from the old bad code, fires when near, asks once per file', async () => {
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-'))
+  const f = path.join(dir, 'Screen.tsx')
+  const filler = Array.from({ length: 100 }, (_, i) => `const line${i} = ${i}`).join('\n')
+  fs.writeFileSync(f, `<HModal onClose={props.onCancel}>\n  <Input a />\n</HModal>\n${filler}\nfunction callApi() { return 1 }`)
+  const rule = parseUnits('## HModal onClose\n**How to apply:** no-op onClose.\n**Trigger:** file `/<HModal\\b[^>]*onClose=\\{[^}]*Cancel/` · ask\n', 'lesson_ui.md')
+  const st = store()
+  const far = { cwd: dir, tool_name: 'Edit', tool_input: { file_path: f, old_string: 'return 1', new_string: 'return 2' } }
+  assert.equal(decide(far, rule, st), null)
+  const near = { cwd: dir, tool_name: 'Edit', tool_input: { file_path: f, old_string: '  <Input a />', new_string: '  <Input km />\n  <Input a />' } }
+  assert.equal(decide(near, rule, st).hookSpecificOutput.permissionDecision, 'ask')
+  assert.equal(decide(near, rule, st), null, 'already asked for this file in this session')
+  const wide = parseUnits('## HModal onClose\n**Trigger:** file `/<HModal\\b[^>]*onClose=\\{[^}]*Cancel/` · ask · near 500\n', 'lesson_ui.md')
+  assert.equal(decide(far, wide, store()).hookSpecificOutput.permissionDecision, 'ask')
+  const write = { cwd: dir, tool_name: 'Write', tool_input: { file_path: f, content: `${filler}\n<HModal onClose={props.onCancel}>` } }
+  assert.equal(decide(write, rule, store()).hookSpecificOutput.permissionDecision, 'ask')
+})
+
+test('block fires every time; long global titles are shortened in checkpoint lists', () => {
+  const st = store()
+  const cmd = { cwd, tool_name: 'Bash', tool_input: { command: 'npx prettier --write src' } }
+  assert.equal(decide(cmd, units, st).hookSpecificOutput.permissionDecision, 'deny')
+  assert.equal(decide(cmd, units, st).hookSpecificOutput.permissionDecision, 'deny')
+  const long = parseUnits(`<!-- task-memory:global-lessons:start -->\n- ${'x'.repeat(200)} — seen 1× · **Checkpoint:** commit\n<!-- task-memory:global-lessons:end -->`, 'global')
+  const text = decide({ cwd, tool_name: 'Bash', tool_input: { command: 'git commit -m a' } }, long, store()).hookSpecificOutput.additionalContext
+  assert.match(text, /x{80,}… \(global\)/)
+  assert.doesNotMatch(text, /x{100}/)
+})

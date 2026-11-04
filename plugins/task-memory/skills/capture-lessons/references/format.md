@@ -96,7 +96,11 @@ depends on Claude remembering to open this file:
 |---|---|---|
 | `edit` | the path of a file being edited or written, relative to the project root — by Edit/Write, or by a Bash command that writes files | glob (`*`, `**`, `?`) |
 | `bash` | a shell command about to run | `/regex/flags`, or a plain substring |
-| `file` | the whole file as it will be after the Edit/Write (existing code included), or the code files a Bash command writes | `/regex/flags`, or a plain substring |
+| `file` | the whole file as it will be after the Edit/Write (existing code included), or the code files a Bash command writes — but only a match within `near` lines (default 40) of the lines being edited | `/regex/flags`, or a plain substring |
+
+A `file` trigger may end with `· near <lines>` to widen or narrow that window
+(`file \`/…/\` · ask · near 80`). Editing a far-away part of a file that still
+holds old bad code stays quiet.
 | `content` | the code being written by Edit/Write, or the text of a Bash command that writes files (heredoc, `sed -i`, a script that opens a file for writing) | `/regex/flags`, or a plain substring |
 
 Read-only commands (`grep`, `cat`, `sed -n`) never match `content` or `edit`,
@@ -113,8 +117,15 @@ apply self-sufficient.
 | Level | Effect | Use for |
 |---|---|---|
 | `remind` | adds the rule to Claude's context, once per session (once per file for a slipped rule); nothing is blocked | rules with legitimate exceptions |
-| `ask` | pauses and asks the user, showing the rule | rules where the user decides case by case |
-| `block` | refuses the action and tells Claude why | rules with no exceptions |
+| `ask` | pauses and asks the user, showing the rule — once per file per session | rules where the user decides case by case |
+| `block` | refuses the action and tells Claude why, every time | rules with no exceptions |
+
+After adding or changing a `content`/`file` trigger, run
+`node "<skill dir>/scripts/lesson-titles.mjs" --check` in the project: it
+prints how many code files each trigger matches today and flags `WIDE` for an
+`ask`/`block` trigger matching more than 5 files (it would stop most edits of
+that kind) and `BROKEN` for a regex that does not compile (it would never fire).
+Narrow every `WIDE` trigger to the actual mistake before saving.
 
 Add a trigger only when the action is unambiguous; a pattern that fires on
 unrelated work teaches Claude to ignore it. Prefer `remind`, and use `block`

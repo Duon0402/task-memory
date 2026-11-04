@@ -62,6 +62,11 @@ them by title before every commit, MR or review reply.
 `skills/capture-lessons/scripts/lesson-titles.mjs` lists every rule one line
 each (`seen · file § title`, `--grep` to filter, `--show` to print one in
 full), so a session can shortlist by title before reading rule bodies.
+`--check` runs every code trigger over the project and reports how many files
+it matches, flagging triggers too wide to `ask` on and regexes that are broken.
+
+A `file` trigger sees existing code too, but only near the lines being edited
+(`· near <lines>`, default 40), and an `ask` is raised once per file per session.
 
 `capture-lessons` adds triggers to rules that point at a concrete path, command
 or code pattern. Rules that need judgment have no trigger and stay in the

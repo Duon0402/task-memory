@@ -41,3 +41,13 @@ test('show prints the whole rule only for the requested title', () => {
   assert.equal(out.length, 1)
   assert.match(out[0], /no-op onClose/)
 })
+
+test('check counts matching files per trigger, flags wide ask/block triggers and broken regexes', async () => {
+  const { checkTriggers } = await import('../../skills/capture-lessons/scripts/lesson-titles.mjs')
+  const r = parseRules('## Wide\n**Trigger:** file `/onClose/` · ask\n\n## Narrow\n**Trigger:** file `/onCancel/` · ask\n\n## Broken\n**Trigger:** content `/(/` · remind\n', 'lesson_ui.md')
+  const files = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`f${i}.tsx`, i === 0 ? 'onClose={onCancel}' : 'onClose={x}']))
+  const out = checkTriggers(r, Object.keys(files), (f) => files[f])
+  assert.match(out.find((l) => l.includes('Wide')), /^WIDE {3}· 8 files/)
+  assert.match(out.find((l) => l.includes('Narrow')), /^ok {5}· 1 files/)
+  assert.match(out.find((l) => l.includes('Broken')), /^BROKEN/)
+})
