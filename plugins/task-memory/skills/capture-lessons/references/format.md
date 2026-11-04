@@ -94,9 +94,17 @@ depends on Claude remembering to open this file:
 
 | Kind | Matches | Pattern |
 |---|---|---|
-| `edit` | the path of a file being edited or written, relative to the project root | glob (`*`, `**`, `?`) |
+| `edit` | the path of a file being edited or written, relative to the project root — by Edit/Write, or by a Bash command that writes files | glob (`*`, `**`, `?`) |
 | `bash` | a shell command about to run | `/regex/flags`, or a plain substring |
-| `content` | the code being written by Edit/Write | `/regex/flags`, or a plain substring |
+| `content` | the code being written by Edit/Write, or the text of a Bash command that writes files (heredoc, `sed -i`, a script that opens a file for writing) | `/regex/flags`, or a plain substring |
+
+Read-only commands (`grep`, `cat`, `sed -n`) never match `content` or `edit`,
+so searching for a pattern does not raise the lesson about writing it.
+
+The reminder shows only the title, **How to apply**, any **Except** and where
+the rule lives (`file § title`); Why and history stay in the file. A rule
+whose How to apply is missing falls back to its first sentence, so keep How to
+apply self-sufficient.
 
 | Level | Effect | Use for |
 |---|---|---|

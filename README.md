@@ -49,6 +49,16 @@ against what Claude is about to do:
 - `ask` pauses and asks you.
 - `block` refuses the action and tells Claude why.
 
+Code written through Bash counts too: a command that writes files (heredoc,
+`sed -i`, a script that opens a file for writing) is matched against `content`
+and `edit` triggers, while read-only commands (`grep`, `cat`, `sed -n`) are not.
+A reminder carries only the rule's title, How to apply, any Except and where
+the rule lives, so it costs a few lines; the Why stays in the file.
+
+`skills/capture-lessons/scripts/lesson-titles.mjs` lists every rule one line
+each (`seen · file § title`, `--grep` to filter, `--show` to print one in
+full), so a session can shortlist by title before reading rule bodies.
+
 `capture-lessons` adds triggers to rules that point at a concrete path, command
 or code pattern. Rules that need judgment have no trigger and stay in the
 `MEMORY.md` index. The hook needs `node` on your `PATH`. It only reads your
@@ -79,7 +89,7 @@ made-up lessons. They are never installed into anyone's memory.
 - `evals/`: checks that the skill records lessons correctly. Run with
   `claude plugin eval plugins/task-memory/skills/capture-lessons --allow-tools Write,Edit,Bash --scaffold`.
 - `plugins/task-memory/hooks/test/`: unit tests for the trigger hook. Run with
-  `node --test plugins/task-memory/hooks/test/*.test.mjs`.
+  `node --test plugins/task-memory/hooks/test/*.test.mjs` (hook and lesson-titles).
 - `effect-evals/`: checks that recorded lessons change behaviour on a later
   task (with vs without memory); see `effect-evals/cases.md`.
 

@@ -77,8 +77,20 @@ reader to skim.
 ### 5. Merge, don't append
 
 For each lesson, look for existing rules in the same area — in topic files,
-the archive and the global section. Read the rules, not just titles; the same
-mistake is often worded differently. Most real cases are *similar but not
+the archive and the global section. Shortlist from titles first, then read only
+the shortlisted rules in full:
+
+```bash
+node "<this skill's base directory>/scripts/lesson-titles.mjs" --archive            # every rule, one line each
+node "<this skill's base directory>/scripts/lesson-titles.mjs" --archive --grep "HModal|onClose"
+node "<this skill's base directory>/scripts/lesson-titles.mjs" --show "HModal"       # full text of the matches
+```
+
+`--grep` searches title, How to apply, Except and trigger patterns, so grep
+for the component, command or path the candidate is about, not only its
+wording. Shortlist generously — every title in the candidate's topic plus every
+grep hit — and open each shortlisted rule; the same mistake is often worded
+differently, and a title alone never settles whether two rules are the same. Most real cases are *similar but not
 identical*, so classify each candidate against the closest rule by asking:
 **had the existing rule been followed exactly as written, would it have
 prevented this?**
@@ -112,6 +124,11 @@ Then:
   topic file only when none fits.
 
 Keep rules ordered by `Seen` and update each file's `seen` / `last_seen`.
+
+Write every title so that it can be judged without the body: name the concrete
+component, command or path, the trap, and the fix ("HModal: onClose fires 250ms
+after close — pass a no-op onClose"). Titles are what the shortlist step and
+the hook reminder show; a vague title ("modal bug") makes the rule unfindable.
 
 For every new or changed rule, ask whether it is tied to a concrete file path,
 command or code pattern. If so, add a `**Trigger:**` line (format.md §2) so the

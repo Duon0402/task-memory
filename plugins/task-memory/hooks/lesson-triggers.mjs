@@ -32,13 +32,14 @@ function read(file) {
   }
 }
 
-// A unit is one rule: a `## ` block in a topic file, or one `- ` line in the
-// global section. Triggers attach to the unit they appear in.
-export function parseUnits(text, source) {
+// A rule is a `## ` block in a topic file, or one `- ` line in the global
+// section. Triggers attach to the rule they appear in.
+export function parseRules(text, source) {
   const units = []
   const push = (title, body) => {
     const triggers = [...body.matchAll(TRIGGER)].map(([, kind, pattern, level]) => ({ kind, pattern, level }))
-    if (triggers.length) units.push({ id: `${source}#${title}`, title, body, triggers })
+    const seen = Number((body.match(/seen (\d+)×/i) || [])[1] || 0)
+    units.push({ id: `${source}#${title}`, source, title, body, seen, triggers })
   }
   if (source === 'global') {
     const start = text.indexOf(GLOBAL_START)
@@ -54,6 +55,10 @@ export function parseUnits(text, source) {
     push(title.trim(), rest.join('\n'))
   }
   return units
+}
+
+export function parseUnits(text, source) {
+  return parseRules(text, source).filter((u) => u.triggers.length)
 }
 
 export function loadUnits(dir) {
@@ -91,13 +96,40 @@ function toRegExp(pattern) {
   }
 }
 
+// Code is often written through Bash (heredoc, python/node script, sed -i) as
+// well as Edit/Write. A command that writes files is matched against content and
+// edit triggers too; a read-only one (grep, cat, sed -n) is not, so searching for
+// a pattern does not raise the lesson about writing it.
+const WRITES = [
+  /(^|[^0-9&>])>>?\s*(?!&|\/dev\/null)[^\s|&;]/,
+  /\bsed\s+(-[a-zA-Z]*i|--in-place)/,
+  /\bperl\s+-[a-zA-Z]*i/,
+  /\btee\b/,
+  /\bopen\([^)]*['"][wa]\+?['"]/,
+  /\.write\(|\bwrite_text\(|\bwriteFileSync?\(/,
+  /\bgit\s+apply\b|\bpatch\s+-/,
+]
+
+export function bashWrites(command) {
+  return WRITES.some((re) => re.test(command))
+}
+
+function relative(file, cwd) {
+  return file && cwd && file.startsWith(cwd + '/') ? file.slice(cwd.length + 1) : file
+}
+
 function subject(input) {
   const t = input.tool_input || {}
   const cwd = input.cwd || ''
-  let file = t.file_path || ''
-  if (file && cwd && file.startsWith(cwd + '/')) file = file.slice(cwd.length + 1)
+  const command = t.command || ''
+  if (input.tool_name === 'Bash') {
+    const writes = bashWrites(command)
+    const paths = writes ? [...command.matchAll(/(?:^|[\s'"`(=])((?:\.{0,2}\/|~\/)?[\w.@-]+(?:\/[\w.@-]+)+)/g)].map((m) => relative(m[1], cwd)) : []
+    return { tool: 'Bash', files: paths, command, content: writes ? command : '' }
+  }
+  const file = relative(t.file_path || '', cwd)
   const content = [t.new_string, t.content, ...(t.edits || []).map((e) => e.new_string)].filter(Boolean).join('\n')
-  return { tool: input.tool_name, file, command: t.command || '', content }
+  return { tool: input.tool_name, files: file ? [file] : [], command, content }
 }
 
 export function matches(trigger, s) {
@@ -105,10 +137,25 @@ export function matches(trigger, s) {
     const re = toRegExp(trigger.pattern)
     return s.tool === 'Bash' && !!re && re.test(s.command)
   }
-  if (s.tool === 'Bash' || !s.file) return false
-  if (trigger.kind === 'edit') return globToRegExp(trigger.pattern).test(s.file)
+  if (trigger.kind === 'edit') return s.files.some((f) => globToRegExp(trigger.pattern).test(f))
+  if (!s.content) return false
   const re = toRegExp(trigger.pattern)
   return !!re && re.test(s.content)
+}
+
+// The reminder carries only what is needed to act — title, How to apply and any
+// Except — plus where the rule lives. Why and history stay in the file and are
+// read only when a case needs judgment, so a reminder costs a few lines.
+export function summary(unit) {
+  const lines = unit.body.replace(TRIGGER, '').split('\n').map((l) => l.trim())
+  const pick = (label) => lines.find((l) => l.startsWith(`**${label}:**`))
+  const how = pick('How to apply')
+  const except = pick('Except')
+  const action = how
+    ? how.replace(/^\*\*How to apply:\*\*\s*/, '')
+    : lines.find((l) => l && !/^seen \d/i.test(l) && !l.startsWith('**')) || ''
+  const where = unit.source === 'global' ? '~/.claude/CLAUDE.md (global lessons)' : `${unit.source} § ${unit.title}`
+  return [`• ${unit.title}`, action && `  ${action}`, except && `  ${except}`, `  ↳ ${where}`].filter(Boolean).join('\n')
 }
 
 // Reminders are shown once per session per rule: after that the rule is
@@ -140,11 +187,9 @@ export function decide(input, units, store) {
   const shown = hits.filter((h) => h.level !== 'remind' || !store?.has(h.unit.id))
   if (!shown.length) return null
   const level = shown.reduce((a, h) => (RANK[h.level] > RANK[a] ? h.level : a), 'remind')
-  const text = shown
-    .map((h) => `• ${h.unit.title}\n${h.unit.body.replace(TRIGGER, '').replace(/\n{3,}/g, '\n\n').trim()}`)
-    .join('\n\n')
+  const text = shown.map((h) => summary(h.unit)).join('\n\n')
   for (const h of shown) if (h.level === 'remind') store?.add(h.unit.id)
-  const header = 'Recorded lesson (task-memory) for what you are about to do:'
+  const header = 'Recorded lesson (task-memory) for what you are about to do (open the rule at ↳ only if you need its Why):'
   if (level === 'remind') {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: `${header}\n\n${text}` } }
   }

@@ -90,3 +90,41 @@ test('bad regex in a lesson is ignored rather than crashing', () => {
   const bad = parseUnits('## Broken\n**Trigger:** bash `/(/` · block\n', 'lesson_x.md')
   assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command: '(' } }, bad, store()), null)
 })
+
+test('reminder is compact: title, How to apply, Except and where the rule lives — no Why', () => {
+  const rule = parseUnits(`## HModal onClose fires 250ms late
+Seen 3× — A-1
+
+Long description of the trap.
+**Why:** a long story that should stay in the file.
+**How to apply:** pass a no-op onClose to HModal.
+**Except:** modals whose visible prop is not state-driven.
+**Trigger:** content \`/<HModal\\b/\` · remind
+`, 'lesson_ui.md')
+  const out = decide({ cwd, tool_name: 'Edit', tool_input: { file_path: '/proj/a.tsx', new_string: '<HModal visible' } }, rule, store())
+  const text = out.hookSpecificOutput.additionalContext
+  assert.match(text, /pass a no-op onClose/)
+  assert.match(text, /\*\*Except:\*\* modals/)
+  assert.match(text, /lesson_ui\.md § HModal onClose fires 250ms late/)
+  assert.doesNotMatch(text, /long story|Long description|Seen 3/)
+})
+
+test('rule without How to apply falls back to its first sentence', () => {
+  const r = decide({ cwd, tool_name: 'Bash', tool_input: { command: 'npx prettier --write a.ts' } }, units, store())
+  assert.match(r.hookSpecificOutput.permissionDecisionReason, /• Never run a formatter over whole files\n  ↳ lesson_code\.md/)
+})
+
+test('Bash commands that write files are matched against content and edit triggers', () => {
+  const py = `python3 - <<'X'\np='src/a.tsx'\ns=open(p).read().replace('a','InsertPicture(')\nopen(p,'w').write(s)\nX`
+  assert.match(decide({ cwd, tool_name: 'Bash', tool_input: { command: py } }, units, store()).hookSpecificOutput.additionalContext, /Resize images/)
+  const heredoc = `cat > src/BaseComponent/WaitingPage.tsx <<'X'\nexport default 1\nX`
+  assert.match(decide({ cwd, tool_name: 'Bash', tool_input: { command: heredoc } }, units, store()).hookSpecificOutput.additionalContext, /shared base components/)
+  const sed = `sed -i '' 's/a/b/' /proj/src/BaseComponent/FlowBaseFC.tsx`
+  assert.match(decide({ cwd, tool_name: 'Bash', tool_input: { command: sed } }, units, store()).hookSpecificOutput.additionalContext, /shared base components/)
+})
+
+test('read-only Bash commands do not raise content or edit triggers', () => {
+  for (const command of ['grep -rn "InsertPicture(" src', 'cat src/BaseComponent/WaitingPage.tsx', "sed -n '1,20p' src/BaseComponent/a.tsx", 'npx tsc --noEmit 2>&1 | grep InsertPicture > /dev/null']) {
+    assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command } }, units, store()), null, command)
+  }
+})
