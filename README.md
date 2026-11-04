@@ -52,8 +52,9 @@ against what Claude is about to do:
 Code written through Bash counts too: a command that writes files (heredoc,
 `sed -i`, a script that opens a file for writing) is matched against `content`
 and `edit` triggers, while read-only commands (`grep`, `cat`, `sed -n`) are not.
-A reminder carries only the rule's title, How to apply, any Except and where
-the rule lives, so it costs a few lines; the Why stays in the file.
+A reminder carries only the rule's title, How to apply, any Except and the
+file it lives in, so it costs a few lines; the Why stays in the file. It is
+shown once per session, or once per file for a rule that has slipped.
 
 `skills/capture-lessons/scripts/lesson-titles.mjs` lists every rule one line
 each (`seen · file § title`, `--grep` to filter, `--show` to print one in

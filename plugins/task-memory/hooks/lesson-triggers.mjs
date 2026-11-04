@@ -39,7 +39,8 @@ export function parseRules(text, source) {
   const push = (title, body) => {
     const triggers = [...body.matchAll(TRIGGER)].map(([, kind, pattern, level]) => ({ kind, pattern, level }))
     const seen = Number((body.match(/seen (\d+)×/i) || [])[1] || 0)
-    units.push({ id: `${source}#${title}`, source, title, body, seen, triggers })
+    const slipped = /slipped \d+×/i.test(body)
+    units.push({ id: `${source}#${title}`, source, title, body, seen, slipped, triggers })
   }
   if (source === 'global') {
     const start = text.indexOf(GLOBAL_START)
@@ -154,12 +155,14 @@ export function summary(unit) {
   const action = how
     ? how.replace(/^\*\*How to apply:\*\*\s*/, '')
     : lines.find((l) => l && !/^seen \d/i.test(l) && !l.startsWith('**')) || ''
-  const where = unit.source === 'global' ? '~/.claude/CLAUDE.md (global lessons)' : `${unit.source} § ${unit.title}`
+  const where = unit.source === 'global' ? '~/.claude/CLAUDE.md (global lessons)' : unit.source
   return [`• ${unit.title}`, action && `  ${action}`, except && `  ${except}`, `  ↳ ${where}`].filter(Boolean).join('\n')
 }
 
 // Reminders are shown once per session per rule: after that the rule is
 // already in context, and repeating it on every edit would only cost tokens.
+// A rule that has slipped (the mistake recurred although it was recorded) is
+// shown once per file instead: being in context once was not enough for it.
 function seenStore(sessionId) {
   const file = path.join(os.tmpdir(), `task-memory-${(sessionId || 'nosession').replace(/[^\w-]/g, '')}.json`)
   let seen = []
@@ -184,11 +187,12 @@ export function decide(input, units, store) {
     const hit = u.triggers.filter((t) => matches(t, s)).sort((a, b) => RANK[b.level] - RANK[a.level])[0]
     if (hit) hits.push({ unit: u, level: hit.level })
   }
-  const shown = hits.filter((h) => h.level !== 'remind' || !store?.has(h.unit.id))
+  const key = (u) => (u.slipped && s.files.length ? `${u.id}@${s.files[0]}` : u.id)
+  const shown = hits.filter((h) => h.level !== 'remind' || !store?.has(key(h.unit)))
   if (!shown.length) return null
   const level = shown.reduce((a, h) => (RANK[h.level] > RANK[a] ? h.level : a), 'remind')
   const text = shown.map((h) => summary(h.unit)).join('\n\n')
-  for (const h of shown) if (h.level === 'remind') store?.add(h.unit.id)
+  for (const h of shown) if (h.level === 'remind') store?.add(key(h.unit))
   const header = 'Recorded lesson (task-memory) for what you are about to do (open the rule at ↳ only if you need its Why):'
   if (level === 'remind') {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: `${header}\n\n${text}` } }

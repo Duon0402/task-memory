@@ -101,8 +101,11 @@ depends on Claude remembering to open this file:
 Read-only commands (`grep`, `cat`, `sed -n`) never match `content` or `edit`,
 so searching for a pattern does not raise the lesson about writing it.
 
-The reminder shows only the title, **How to apply**, any **Except** and where
-the rule lives (`file § title`); Why and history stay in the file. A rule
+The reminder shows only the title, **How to apply**, any **Except** and the
+file the rule lives in; Why and history stay in the file. A `remind` rule is
+shown once per session, except a rule marked `slipped`, which is shown once per
+file — its mistake recurred while it was in context, so keep its How to apply
+short. A rule
 whose How to apply is missing falls back to its first sentence, so keep How to
 apply self-sufficient.
 

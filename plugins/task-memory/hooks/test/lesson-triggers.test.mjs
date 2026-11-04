@@ -105,13 +105,14 @@ Long description of the trap.
   const text = out.hookSpecificOutput.additionalContext
   assert.match(text, /pass a no-op onClose/)
   assert.match(text, /\*\*Except:\*\* modals/)
-  assert.match(text, /lesson_ui\.md § HModal onClose fires 250ms late/)
+  assert.match(text, /↳ lesson_ui\.md$/m)
+  assert.equal(text.split('HModal onClose fires 250ms late').length, 2)
   assert.doesNotMatch(text, /long story|Long description|Seen 3/)
 })
 
 test('rule without How to apply falls back to its first sentence', () => {
   const r = decide({ cwd, tool_name: 'Bash', tool_input: { command: 'npx prettier --write a.ts' } }, units, store())
-  assert.match(r.hookSpecificOutput.permissionDecisionReason, /• Never run a formatter over whole files\n  ↳ lesson_code\.md/)
+  assert.match(r.hookSpecificOutput.permissionDecisionReason, /• Never run a formatter over whole files\n  ↳ lesson_code\.md\n?$/)
 })
 
 test('Bash commands that write files are matched against content and edit triggers', () => {
@@ -127,4 +128,24 @@ test('read-only Bash commands do not raise content or edit triggers', () => {
   for (const command of ['grep -rn "InsertPicture(" src', 'cat src/BaseComponent/WaitingPage.tsx', "sed -n '1,20p' src/BaseComponent/a.tsx", 'npx tsc --noEmit 2>&1 | grep InsertPicture > /dev/null']) {
     assert.equal(decide({ cwd, tool_name: 'Bash', tool_input: { command } }, units, store()), null, command)
   }
+})
+
+test('a slipped rule is reminded once per file, a normal rule once per session', () => {
+  const rules = parseUnits(`## Slipped rule
+Seen 3× — A-1 · last 2026-01-01 · slipped 1×
+**How to apply:** do X.
+**Trigger:** content \`/<HModal\\b/\` · remind
+
+## Normal rule
+Seen 1× — A-1
+**How to apply:** do Y.
+**Trigger:** content \`BarcodeScan\` · remind
+`, 'lesson_ui.md')
+  const st = store()
+  const edit = (file, text) => decide({ cwd, tool_name: 'Edit', tool_input: { file_path: `/proj/${file}`, new_string: text } }, rules, st)
+  assert.match(edit('a.tsx', '<HModal />').hookSpecificOutput.additionalContext, /Slipped rule/)
+  assert.equal(edit('a.tsx', '<HModal />'), null)
+  assert.match(edit('b.tsx', '<HModal />').hookSpecificOutput.additionalContext, /Slipped rule/)
+  assert.match(edit('a.tsx', '<BarcodeScan />').hookSpecificOutput.additionalContext, /Normal rule/)
+  assert.equal(edit('b.tsx', '<BarcodeScan />'), null)
 })
