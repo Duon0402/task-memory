@@ -306,18 +306,30 @@ export function checkpointEvents(s) {
   return s.tool === 'Bash' ? Object.keys(CHECKPOINT_EVENTS).filter((e) => CHECKPOINT_EVENTS[e].test(s.command)) : []
 }
 
-export function decide(input, units, store) {
-  const s = subject(input)
+function hitsFor(s, units) {
   const hits = []
   for (const u of units) {
     const hit = u.triggers.filter((t) => matches(t, s)).sort((a, b) => RANK[b.level] - RANK[a.level])[0]
     if (hit) hits.push({ unit: u, level: hit.level })
   }
-  // remind: once per session (once per file for a slipped rule). ask: once per
-  // file per session, so an answered question is not asked again on the next edit.
-  // block: every time.
-  const key = (h) =>
-    h.level === 'ask' ? `ask:${h.unit.id}@${s.files[0] || ''}` : h.unit.slipped && s.files.length ? `${h.unit.id}@${s.files[0]}` : h.unit.id
+  return hits
+}
+
+const askKey = (h, s) => `ask:${h.unit.id}@${s.files[0] || ''}`
+
+// PostToolUse: the action ran, so the user allowed it — only now is an ask
+// marked as answered for this file. A denied action that is retried is asked again.
+export function markAllowed(input, units, store) {
+  const s = subject(input)
+  for (const h of hitsFor(s, units)) if (h.level === 'ask') store?.add(askKey(h, s))
+}
+
+export function decide(input, units, store) {
+  const s = subject(input)
+  const hits = hitsFor(s, units)
+  // remind: once per session (once per file for a slipped rule). ask: until the
+  // user has allowed one such action on the file this session. block: every time.
+  const key = (h) => (h.level === 'ask' ? askKey(h, s) : h.unit.slipped && s.files.length ? `${h.unit.id}@${s.files[0]}` : h.unit.id)
   const shown = hits.filter((h) => h.level === 'block' || !store?.has(key(h)))
   // Checkpoint rules are listed by title every time their moment comes: a list
   // of titles is cheap, and these rules have no pattern that could raise them earlier.
@@ -333,7 +345,7 @@ export function decide(input, units, store) {
     )
   }
   const text = parts.join('\n\n')
-  for (const h of shown) if (h.level !== 'block') store?.add(key(h))
+  for (const h of shown) if (h.level === 'remind') store?.add(key(h))
   const header = 'Recorded lesson (task-memory) for what you are about to do (open the rule at ↳ only if you need its Why):'
   if (level === 'remind') {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: `${header}\n\n${text}` } }
@@ -362,6 +374,10 @@ async function main() {
     try {
       fs.unlinkSync(storeFile(input.session_id))
     } catch {}
+    return
+  }
+  if (process.argv.includes('--post')) {
+    markAllowed(input, loadUnits(memoryDir(input)), seenStore(input.session_id))
     return
   }
   const out = decide(input, loadUnits(memoryDir(input)), seenStore(input.session_id))

@@ -117,7 +117,7 @@ apply self-sufficient.
 | Level | Effect | Use for |
 |---|---|---|
 | `remind` | adds the rule to Claude's context, once per session (once per file for a slipped rule); nothing is blocked | rules with legitimate exceptions |
-| `ask` | pauses and asks the user, showing the rule — once per file per session | rules where the user decides case by case |
+| `ask` | pauses and asks the user, showing the rule — until the user allows one such action on that file in the session (a denied action that is retried is asked again) | rules where the user decides case by case |
 | `block` | refuses the action and tells Claude why, every time | rules with no exceptions |
 
 After adding or changing a `content`/`file` trigger, run

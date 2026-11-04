@@ -66,7 +66,7 @@ full), so a session can shortlist by title before reading rule bodies.
 it matches, flagging triggers too wide to `ask` on and regexes that are broken.
 
 A `file` trigger sees existing code too, but only near the lines being edited
-(`· near <lines>`, default 40), and an `ask` is raised once per file per session.
+(`· near <lines>`, default 40), and an `ask` stops being raised for a file once the user has allowed one such edit in the session; a denied edit that is retried is asked again.
 
 `capture-lessons` adds triggers to rules that point at a concrete path, command
 or code pattern. Rules that need judgment have no trigger and stay in the

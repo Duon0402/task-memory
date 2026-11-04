@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseUnits, decide, bashWrites } from '../lesson-triggers.mjs'
+import { parseUnits, decide, bashWrites, markAllowed } from '../lesson-triggers.mjs'
 
 const topic = `---
 name: lesson-code
@@ -249,7 +249,9 @@ test('file trigger stays quiet when the edit is far from the old bad code, fires
   assert.equal(decide(far, rule, st), null)
   const near = { cwd: dir, tool_name: 'Edit', tool_input: { file_path: f, old_string: '  <Input a />', new_string: '  <Input km />\n  <Input a />' } }
   assert.equal(decide(near, rule, st).hookSpecificOutput.permissionDecision, 'ask')
-  assert.equal(decide(near, rule, st), null, 'already asked for this file in this session')
+  assert.equal(decide(near, rule, st).hookSpecificOutput.permissionDecision, 'ask', 'denied and retried: ask again')
+  markAllowed(near, rule, st)
+  assert.equal(decide(near, rule, st), null, 'allowed once: not asked again for this file in this session')
   const wide = parseUnits('## HModal onClose\n**Trigger:** file `/<HModal\\b[^>]*onClose=\\{[^}]*Cancel/` · ask · near 500\n', 'lesson_ui.md')
   assert.equal(decide(far, wide, store()).hookSpecificOutput.permissionDecision, 'ask')
   const write = { cwd: dir, tool_name: 'Write', tool_input: { file_path: f, content: `${filler}\n<HModal onClose={props.onCancel}>` } }
